@@ -30,6 +30,7 @@ pub fn initialize_grad_v(
         } else {
             panic!("Ошибка поиска тензора ориентаций");
         }
+
         grad_v_component.set_tensor(new_matrix);
     }
 }
@@ -121,11 +122,11 @@ pub fn calc_eps(
 
 pub fn calc_mean_eps(
     eps_map: &HashMap<CrystalEntity, EpsComponent>,
-    orient_map: &HashMap<CrystalEntity, RotationComponent>,
+    rotation_map: &HashMap<CrystalEntity, RotationComponent>,
 ) -> Matrix3<f64> {
     let mut mean_matrix = Matrix3::zeros();
     for (entity, e_component) in eps_map.iter() {
-        if let Some(orient_component) = orient_map.get(entity) {
+        if let Some(orient_component) = rotation_map.get(entity) {
             mean_matrix += orient_component.get_tensor()
                 * e_component.get_tensor()
                 * orient_component.get_tensor().transpose();
@@ -141,13 +142,30 @@ pub fn calc_intensity_eps(din_component: &EpsComponent) -> f64 {
     (din.dot(&din) * 2.0 / 3.0).sqrt()
 }
 
+pub fn calc_sigma(
+    sigma_map: &mut HashMap<CrystalEntity, SigmaComponent>,
+    sigma_rate_map: &HashMap<CrystalEntity, SigmaRateComponent>,
+    dt: f64,
+) {
+    for (entity, sigma_component) in sigma_map.iter_mut() {
+        if let Some(sigma_rate_component) = sigma_rate_map.get(entity) {
+            let mut summ = Matrix3::zeros();
+            summ += sigma_component.get_tensor();
+            summ += sigma_rate_component.get_tensor() * dt;
+            sigma_component.set_tensor(summ);
+        } else {
+            panic!("Ошибка поиска компонента sigma");
+        }
+    }
+}
+
 pub fn calc_mean_sigma(
     sigma_map: &HashMap<CrystalEntity, SigmaComponent>,
-    orient_map: &HashMap<CrystalEntity, RotationComponent>,
+    rotation_map: &HashMap<CrystalEntity, RotationComponent>,
 ) -> Matrix3<f64> {
     let mut mean_matrix = Matrix3::zeros();
     for (entity, sigma_component) in sigma_map.iter() {
-        if let Some(orient_component) = orient_map.get(entity) {
+        if let Some(orient_component) = rotation_map.get(entity) {
             mean_matrix += orient_component.get_tensor()
                 * sigma_component.get_tensor()
                 * orient_component.get_tensor().transpose();
@@ -160,12 +178,12 @@ pub fn calc_mean_sigma(
 
 pub fn calc_intensity_s(sigma_component: &SigmaComponent) -> f64 {
     let sigma = sigma_component.get_tensor();
-    (sigma.dot(&sigma) * 2.0 / 3.0).sqrt()
+    (sigma.dot(&sigma) * 3.0 / 2.0).sqrt()
 }
 
 pub fn write_intensity_to_file(
-    eps_poly_component: &EpsComponent,
-    sigma_poly_component: &SigmaComponent,
+    polycrystal_eps: &EpsComponent,
+    polycrystal_sigma: &SigmaComponent,
     step: i64,
     dt: f64,
 ) {
@@ -177,9 +195,9 @@ pub fn write_intensity_to_file(
     //let file = File::create(FILE_OUTPUT_PATH.to_string() + "din.dat")?;
     let mut buf_writer = BufWriter::with_capacity(4 * (10 + 1 + 10 + 1) * 3, file);
 
-    write!(buf_writer, "{:.4e}\t", calc_intensity_eps(eps_poly_component))
+    write!(buf_writer, "{:.4e}\t", calc_intensity_eps(polycrystal_eps))
         .expect("Ошибка записи интенсивности деформации в rvout.dat");
-    write!(buf_writer, "{:.4e}\t", calc_intensity_s(sigma_poly_component))
+    write!(buf_writer, "{:.4e}\t", calc_intensity_s(polycrystal_sigma))
         .expect("Ошибка записи интенсивности напряжения в rvout.dat");
     write!(buf_writer, "{}\t", dt * step as f64).expect("Ошибка записи времени в rvout.dat");
 
@@ -240,11 +258,11 @@ pub fn initialize_elasticity_tensor_fcc(
 
 pub fn calc_hooke_law(
     sigma_rate_map: &mut HashMap<CrystalEntity, SigmaRateComponent>,
-    elasticity_tensor_map: &HashMap<CrystalEntity, ElasticityTensorComponent>,
+    elasticity_map: &HashMap<CrystalEntity, ElasticityTensorComponent>,
     de_map: &HashMap<CrystalEntity, DComponent>,
 ) {
     for (entity, sigma_rate_component) in sigma_rate_map.iter_mut() {
-        if let Some(elasticity_tensor_component) = elasticity_tensor_map.get(entity) {
+        if let Some(elasticity_tensor_component) = elasticity_map.get(entity) {
             let c = elasticity_tensor_component.get_value();
             if let Some(de_component) = de_map.get(entity) {
                 let de: Vector6<f64> = de_component.get_vector();
