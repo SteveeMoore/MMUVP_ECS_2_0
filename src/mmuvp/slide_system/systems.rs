@@ -29,7 +29,7 @@ pub fn initialize_burgers_vectors(
         if values.len()!=3 {
             panic!("Ошибка. Количество элементов в b.input равно {}",values.len());
         }
-        let vector = Vector3::new(values[0], values[1], values[2]).normalize();
+        let vector = Vector3::new(values[0], values[1], values[2]).normalize();    
         burgers_map.values_mut().for_each(|burgers_vector| {
             if index < 12 {
                 burgers_vector.set_vector(index * 2, vector);
@@ -179,13 +179,13 @@ pub fn calc_gamma(
 pub fn calc_gamma_rate(
     gamma_rate_map: &mut HashMap<CrystalEntity, GammaRateComponent>,
     tau_map: &HashMap<CrystalEntity, TauComponent>,
-    tauc_map: &HashMap<CrystalEntity, TauComponent>,
+    tau_c_map: &HashMap<CrystalEntity, TauComponent>,
     gamma_0: f64,
     m: f64,
 ) {
     for (entity, gamma_rate_component) in gamma_rate_map.iter_mut() {
         if let Some(tau_component) = tau_map.get(entity) {
-            if let Some(tau_c_component) = tauc_map.get(entity) {
+            if let Some(tau_c_component) = tau_c_map.get(entity) {
                 for index in 0..24 {
                     let tau = tau_component
                         .get_values(index)
