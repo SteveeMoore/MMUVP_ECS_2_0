@@ -78,10 +78,10 @@ impl SpinComponent{
         }
     }
 
-    pub fn set_matrix(&mut self, matrix: Matrix3<f64>) -> Result<(), &str> {
+    pub fn set_tensor(&mut self, tensor: Matrix3<f64>) -> Result<(), &str> {
         // Проверка на ортогональность матрицы
-        if Self::is_orthogonal(&matrix) {
-            self.tensor_form = matrix;
+        if Self::is_orthogonal(&tensor) {
+            self.tensor_form = tensor;
             Ok(())
         } else {
             Err("Тензор не является ортогональным.")

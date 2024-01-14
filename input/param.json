@@ -2,7 +2,6 @@
     "dt": 1e-2,
     "steps_num": 20000,
     "write_step": 100,
-    "max_int_e": 10,
 
     "grain_num": 1000,
     "c11": 220.6e9,
