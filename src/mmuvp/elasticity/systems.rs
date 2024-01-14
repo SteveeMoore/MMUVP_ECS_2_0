@@ -1,12 +1,17 @@
 #![allow(dead_code)]
 
-use std::{collections::HashMap, fs::{File, OpenOptions}, io::{self, BufRead, BufWriter, Write}, path::PathBuf};
+use std::{
+    collections::HashMap, 
+    fs::{File, OpenOptions}, 
+    io::{self, BufRead, BufWriter, Write}, 
+    path::PathBuf};
 
 use nalgebra::{Matrix3, Matrix6, Vector6};
 
 use crate::{mmuvp::{
     entity::CrystalEntity, 
-    rotation::components::RotationComponent
+    rotation::components::*, 
+    slide_system::components::*
 }, consts::{FILE_INPUT_PATH, FILE_OUTPUT_PATH, MEGA}};
 
 use super::components::*;
@@ -248,6 +253,35 @@ pub fn calc_hooke_law(
             } else {
                 panic!("Ошибка поиска компанента de");
             }
+        }
+    }
+}
+
+pub fn calc_din(
+    din_map: &mut HashMap<CrystalEntity, DComponent>,
+    gamma_rate_map: &HashMap<CrystalEntity, GammaRateComponent>,
+    bn_map: &HashMap<CrystalEntity, BNComponent>,
+) {
+    for (entity, din_component) in din_map.iter_mut() {
+        if let Some(gamma_rate_component) = gamma_rate_map.get(entity) {
+            if let Some(bn_component) = bn_map.get(entity) {
+                let mut summ = Matrix3::zeros();
+                for index in 0..24 {
+                    let gamma_rate = gamma_rate_component
+                        .get_values(index)
+                        .expect("Не удалось найти gamma_rate");
+                    let bn = bn_component
+                        .get_matrix(index)
+                        .expect("Не удалось найти матрицу bn");
+                    let term = gamma_rate * bn;
+                    summ += term;
+                }
+                din_component.set_tensor(summ);
+            } else {
+                panic!("Ошибка поиска компонента bn");
+            }
+        } else {
+            panic!("Ошибка поиска компонента gamma_rate");
         }
     }
 }
