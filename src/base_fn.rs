@@ -3,6 +3,8 @@
 
 use std::{fs, time::Duration};
 
+use crate::mmuvp::elasticity::components::{SigmaComponent, EpsComponent};
+
 use super::consts::FILE_OUTPUT_PATH;
 
 #[macro_export]
@@ -40,19 +42,11 @@ pub fn time_remaining(current_step: u64, current_time: Duration, last_step: u64)
         // Если текущий шаг больше или равен последнему, цикл завершился.
         return "0 минут 0 секунд".to_string()
     }
-
-    let total_steps = last_step - current_step;
-    
-    if total_steps == 0 {
-        // Избегаем деления на ноль, если всего один шаг.
-        return "0 минут 0 секунд".to_string()
-    }
-
-    let estimated_duration_per_step = current_time.as_secs() / total_steps;
-
+  
+    let estimated_duration_per_step = current_time.as_secs_f64() / (current_step as f64);
     // Оценка оставшегося времени на основе времени, прошедшего с начала цикла.
-    let remaining_steps = last_step - current_step - 1;
-    let remaining_time = estimated_duration_per_step * remaining_steps;
+    let remaining_steps = (last_step - current_step - 1) as f64;
+    let remaining_time = (estimated_duration_per_step * remaining_steps) as u64;
 
     let minutes = remaining_time / 60;
     let seconds = remaining_time % 60;
@@ -60,8 +54,31 @@ pub fn time_remaining(current_step: u64, current_time: Duration, last_step: u64)
     format!("{} минут {} секунд", minutes, seconds)
 }
 
-pub fn print_current_sys(current_time: Duration, current_step: u64, last_step:u64, din: String, sigma: String){
+pub fn print_current_sys(current_time: Duration, step: i64, last_step:i64, polycrystal_eps: &EpsComponent, polycrystal_sigma: &SigmaComponent){
+    let mut sigma = String::new();
+    for (i, &x) in polycrystal_sigma.get_tensor().iter().enumerate() {
+        let formatted = format!("{:.2}", x);
+        sigma.push_str(&formatted);
+        if i % 3 == 2 {
+            sigma.push('\n');
+        } else {
+            sigma.push(' ');
+        }
+    }
 
+    let mut eps = String::new();
+    for (i, &x) in polycrystal_eps.get_tensor().iter().enumerate() {
+        let formatted = format!("{:.2}", x);
+        eps.push_str(&formatted);
+        if i % 3 == 2 {
+            eps.push('\n');
+        } else {
+            eps.push(' ');
+        }
+    }
+
+    let current_step = step as u64;
+    let last_step = last_step as u64;
     let curr_mins = current_time.as_secs() / 60;
     let curr_secs = current_time.as_secs() % 60;
     let string_time = format!("{} мин {} сек", curr_mins, curr_secs);
@@ -73,5 +90,5 @@ pub fn print_current_sys(current_time: Duration, current_step: u64, last_step:u6
 "****************************************************************************************\n
  Текущее время: {}. Текущий шаг: {}. Осталось времени: {}\n
  Напряжения:\n{} Деформации:\n{}\n
-****************************************************************************************\n", string_time, string_step, string_time_remaining, sigma, din);
+****************************************************************************************\n", string_time, string_step, string_time_remaining, sigma, eps);
 }
