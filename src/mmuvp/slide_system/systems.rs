@@ -211,11 +211,11 @@ pub fn calc_gamma_rate(
 }
 
 pub fn calc_tauc_rate_sat_law(
-    tauc_rate_map: &mut HashMap<CrystalEntity, TauRateComponent>,
+    tau_c_rate_map: &mut HashMap<CrystalEntity, TauRateComponent>,
     h_matrix_map: & HashMap<CrystalEntity, HMatrixComponent>,
     gamma_rate_map: &HashMap<CrystalEntity, GammaRateComponent>,
 ){
-    for (entity, tauc_rate_component) in tauc_rate_map.iter_mut(){
+    for (entity, tauc_rate_component) in tau_c_rate_map.iter_mut(){
         if let Some(h_matrix_component) = h_matrix_map.get(entity){
             if let Some(gamma_rate_component) = gamma_rate_map.get(entity){
                 for index_k in 0..24{
@@ -242,12 +242,12 @@ pub fn calc_tauc_rate_sat_law(
 }
 
 pub fn calc_tauc(
-    tauc_map: &mut HashMap<CrystalEntity, TauComponent>,
-    tauc_rate_map: &mut HashMap<CrystalEntity, TauRateComponent>,
+    tau_c_map: &mut HashMap<CrystalEntity, TauComponent>,
+    tau_c_rate_map: &mut HashMap<CrystalEntity, TauRateComponent>,
     dt:f64,
 ){
-    for (entity,tauc_component) in tauc_map.iter_mut(){
-        if let Some(tauc_rate_component) = tauc_rate_map.get(entity){
+    for (entity,tauc_component) in tau_c_map.iter_mut(){
+        if let Some(tauc_rate_component) = tau_c_rate_map.get(entity){
             for index in 0..24{
                 let tauc_rate = tauc_rate_component.get_values(index).expect("Ошибка извлечения tauc_rate");
                 let tauc = tauc_component.get_values(index).expect("Ошибка извлечения tauc");
@@ -260,13 +260,13 @@ pub fn calc_tauc(
 
 pub fn calc_h_vector(
     h_vector_map:  &mut HashMap<CrystalEntity, HVectorComponent>,
-    tauc_map: &HashMap<CrystalEntity, TauComponent>,
+    tau_c_map: &HashMap<CrystalEntity, TauComponent>,
     tau_sat: f64,
     h0: f64,
     a: f64,
 ){
     for (entity, h_vector_component) in h_vector_map.iter_mut(){
-        if let Some(tauc_component) = tauc_map.get(entity){
+        if let Some(tauc_component) = tau_c_map.get(entity){
             for index in 0..24{
                 let tauc = tauc_component
                     .get_values(index)
