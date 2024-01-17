@@ -7,6 +7,8 @@ mod base_fn;
 use std::{collections::HashMap, time::Instant};
 
 //Ниже добавлены все используемые компоненты и системы. Вручную желательно не исправлять во избежание ошибок.
+use base_fn::*;
+
 use mmuvp::{
     params::{
         components::Params, 
@@ -28,15 +30,15 @@ use mmuvp::{
     }
 };
 
-use base_fn::*;
 
 
 
+//Начало основной программы
 fn main() {
     //Очищение файлы в папке output. 
     clear_output_folder();
 
-    //Задаем HashMap где будут храниться все параметры модели
+    //Объявление и инициализация HashMap где будут храниться все параметры модели
     let mut params = Params::new();
     //Считываем все параметры из файла param.json
     from_file(&mut params);
@@ -50,8 +52,6 @@ fn main() {
     //Ниже объявляются HashMap всех компонентов. Первый аргумент - название переменной, второй - сущность, третий - компонент. 
     //Рекомендуется использовать стандартные переменные
     create_component_map!(rotation_map, CrystalEntity, RotationComponent);
-    create_component_map!(rotation_rate_map, CrystalEntity, RotationRateComponent);
-    create_component_map!(spin_map, CrystalEntity, SpinComponent);
     create_component_map!(grad_v_map, CrystalEntity, GradVComponent);
     create_component_map!(d_map, CrystalEntity, DComponent);
     create_component_map!(de_map, CrystalEntity, DComponent);
@@ -59,7 +59,6 @@ fn main() {
     create_component_map!(sigma_map, CrystalEntity, SigmaComponent);
     create_component_map!(sigma_rate_map, CrystalEntity, SigmaRateComponent);
     create_component_map!(elasticity_map, CrystalEntity, ElasticityTensorComponent);
-    create_component_map!(w_map, CrystalEntity, WComponent);
     create_component_map!(eps_map, CrystalEntity, EpsComponent);
     create_component_map!(burgers_map,CrystalEntity, BurgersVectorComponent);
     create_component_map!(normals_map, CrystalEntity, NormalVectorComponent);
@@ -81,8 +80,6 @@ fn main() {
         //Заполняются все HashMap объявленные выше. 
         //Первый аргумент - сущность, второй аргумент - новый экземпляр компонента, третий аргумент - HashMap соответствующего компонента
         insert_component!(entity, RotationComponent::new(), rotation_map);
-        insert_component!(entity, RotationRateComponent::new(), rotation_rate_map);
-        insert_component!(entity, SpinComponent::new(), spin_map);
         insert_component!(entity, GradVComponent::new(), grad_v_map);
         insert_component!(entity, DComponent::new(), d_map);
         insert_component!(entity, DComponent::new(), de_map);
@@ -90,7 +87,6 @@ fn main() {
         insert_component!(entity, SigmaComponent::new(), sigma_map);
         insert_component!(entity, SigmaRateComponent::new(), sigma_rate_map);
         insert_component!(entity, ElasticityTensorComponent::new(), elasticity_map);
-        insert_component!(entity, WComponent::new(), w_map);
         insert_component!(entity, EpsComponent::new(), eps_map);
         insert_component!(entity, BurgersVectorComponent::new(), burgers_map);
         insert_component!(entity, NormalVectorComponent::new(), normals_map);
@@ -114,7 +110,6 @@ fn main() {
     initialize_tau_c(&mut tau_c_map, params.get_f64("tau_c"));
     initialize_grad_v(&mut grad_v_map, &rotation_map, init_grad_v);
     initialize_d(&mut d_map, &grad_v_map);
-    initialize_w(&mut w_map, &grad_v_map);
 
     //Объявление и инциализация переменных для поликристалла
     let mut polycrystal_sigma = SigmaComponent::new();
@@ -143,6 +138,10 @@ fn main() {
         calc_tau(&mut tau_map, &bn_map, &sigma_map);
         calc_gamma_rate(&mut gamma_rate_map, &tau_map, &tau_c_map, params.get_f64("gamma_0"), params.get_f64("m"));
         calc_gamma(&mut gamma_map, &gamma_rate_map, dt);
+        calc_h_vector(&mut h_vector_map, &tau_c_map, params.get_f64("tau_sat"), params.get_f64("h0"), params.get_f64("a"));
+        calc_h_matrix(&mut h_matrix_map, &h_vector_map, params.get_f64("qlat"));
+        calc_tauc_rate_sat_law(&mut tau_c_rate_map, &h_matrix_map, &gamma_rate_map);
+        calc_tauc(&mut tau_c_map, &mut tau_c_rate_map, dt);
         calc_din(&mut din_map, &gamma_rate_map, &bn_map);
         calc_de_elastic_plastic_deform(&mut de_map, &d_map, &din_map);
         calc_hooke_law(&mut sigma_rate_map, &elasticity_map, &de_map);
@@ -154,5 +153,4 @@ fn main() {
     polycrystal_eps.set_tensor(calc_mean_eps(&eps_map, &rotation_map));
     write_intensity_to_file(&polycrystal_eps, &polycrystal_sigma, params.get_i64("steps_num"), dt);
     print_current_sys(time.elapsed(), params.get_i64("steps_num"), params.get_i64("steps_num"), &polycrystal_eps, &polycrystal_sigma);
-   
 }
