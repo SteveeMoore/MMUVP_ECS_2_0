@@ -9,9 +9,9 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{consts::FILE_OUTPUT_PATH, mmuvp::{entity::CrystalEntity, elasticity::components::WComponent, slide_system::components::{BNComponent, GammaComponent}}};
+use crate::{consts::FILE_OUTPUT_PATH, mmuvp::entity::CrystalEntity};
 
-use super::components::{RotationComponent, SpinComponent, RotationRateComponent};
+use super::components::RotationComponent;
 
 pub fn gen_uniform_distribution(rotation_map: &mut HashMap<CrystalEntity, RotationComponent>) {
     if rotation_map.len() > 1 {
@@ -140,18 +140,18 @@ pub fn write_rotation_to_file(rotation_map: &HashMap<CrystalEntity, RotationComp
         .flush()
         .expect("Ошибка завершения записи тензора ориентации");
 }
-
+/*
 pub fn calc_spin(
     spin_map: &mut HashMap<CrystalEntity, SpinComponent>,
     w_map: &HashMap<CrystalEntity,WComponent>,
     bn_map: &HashMap<CrystalEntity,BNComponent>,
-    gamma_map: &HashMap<CrystalEntity,GammaComponent>
+    gamma_rate_map: &HashMap<CrystalEntity,GammaRateComponent>
 )
 {
     for (entity, spin) in spin_map.iter_mut(){
         if let Some(w_component)= w_map.get(entity) {
             if let Some(bn_component)= bn_map.get(entity) {
-                if let Some(gamma_component)= gamma_map.get(entity) {
+                if let Some(gamma_component)= gamma_rate_map.get(entity) {
                     let w_tensor = w_component.get_tensor();
                     let mut second_term = Matrix3::zeros();
                     for index in 0..24 {
@@ -176,40 +176,68 @@ pub fn calc_spin(
             panic!("Ошибка поиска компонента grad_v");
         }
     }
+    
 }
 
 pub fn calc_rotation_rate(
     rotation_rate_map: &mut HashMap<CrystalEntity,RotationRateComponent>,
-    rotation_map:&HashMap<CrystalEntity,RotationComponent>,
     spin_map:&HashMap<CrystalEntity,SpinComponent>,
+    dt:f64,
 ){
+    let mut axis_angle:Vector3<f64> = Vector3::new(0.0, 0.0,0.0);
+
     for (entity, rotation_rate_component) in rotation_rate_map.iter_mut(){
-        if let Some(rotation_component) = rotation_map.get(entity){
-            let rotation = rotation_component.get_tensor();
-            if let Some(spin_component) = spin_map.get(entity){
-                let spin = spin_component.get_tensor();
-                let matrix = spin*rotation;
-                rotation_rate_component.set_tensor(matrix).unwrap();
-            } else {
-                panic!("Ошибка поиска spin");
+        if let Some(spin_component) = spin_map.get(entity){
+            let spin = spin_component.get_tensor();
+            for i in 0..3{
+                for j in 0..3{
+                    for k in 0..3{
+                        axis_angle[i] += levi_civita(i, j, k) * spin[(k,j)];
+                    }
+                }
             }
+            let rotation = Rotation3::new(axis_angle*dt);
+            let tensor = *rotation.matrix();
+            rotation_rate_component.set_tensor(tensor).unwrap();
         } else {
-            panic!("Ошибка поиска rotation_component");
+            panic!("Ошибка поиска компонента spin")
         }
     }
+    
 }
 
 pub fn calc_rotation(
     rotation_map:&mut HashMap<CrystalEntity,RotationComponent>,
+    grad_v_map: &mut HashMap<CrystalEntity, GradVComponent>,
+    d_map: &mut HashMap<CrystalEntity, DComponent>,
+    w_map: &mut HashMap<CrystalEntity, WComponent>,
     rotation_rate_map: & HashMap<CrystalEntity,RotationRateComponent>,
-    dt: f64,
+    init_grad_v: Matrix3<f64>,
+    dt:f64,
 ){
-    for (entity, rotation_component) in rotation_map.iter_mut() {
-        if let Some(rotation_rate_component) = rotation_rate_map.get(entity){
-            let mut summ = Matrix3::zeros();
-            summ += rotation_component.get_tensor();
-            summ += rotation_rate_component.get_tensor() * dt;
-            rotation_component.set_matrix(summ).unwrap();
+    for (entity, rotation_rate_component) in rotation_rate_map.iter() {
+        if let Some(rotation_component) = rotation_map.get_mut(entity){
+            let rotation = rotation_component.get_tensor();
+            let rotation_rate = rotation_rate_component.get_tensor();
+            let matrix = rotation_rate*rotation;
+            rotation_component.set_matrix(matrix).unwrap();
         }
     }
+
+    initialize_grad_v(grad_v_map, rotation_map, init_grad_v);
+    initialize_d(d_map, grad_v_map);
+    initialize_w(w_map, grad_v_map);
 }
+
+pub fn levi_civita(i:usize, j:usize, k:usize) -> f64 {
+    if (i == j) || (j == k) || (k == i) {
+        0.0
+    } else if (i + 1) % 3 == j && (j + 1) % 3 == k {
+        1.0
+    } else if (i + 1) % 3 == k && (k + 1) % 3 == j {
+        -1.0
+    } else {
+        0.0
+    }
+}
+ */
