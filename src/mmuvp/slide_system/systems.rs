@@ -14,6 +14,28 @@ use crate::{
 
 use super::components::*;
 
+pub fn get_burgers_vectors(
+    burgers_component: &mut BurgersVectorComponent,
+){
+    let file = File::open(PathBuf::from(FILE_INPUT_PATH).join("b.input")).expect("Ошибка открытия файла b.input");
+    let reader = BufReader::new(file);
+
+    for (index, line) in reader.lines().enumerate() {
+        let line = line.expect("Ошибка. Файл b.input заполнен неверно");
+        let values: Vec<f64> = line
+            .split_whitespace()
+            .map(|s| s.parse::<f64>().expect("Ошибка перевода строки b.input в числа"))
+            .collect();
+        if values.len()!=3 {
+            panic!("Ошибка. Количество элементов в b.input равно {}",values.len());
+        }
+        let vector = Vector3::new(values[0], values[1], values[2]).normalize(); 
+        burgers_component.set_vector(index*2, vector);
+        burgers_component.set_vector(index*2+1, -vector);
+    }
+}
+
+
 pub fn initialize_burgers_vectors(
     burgers_map: &mut HashMap<CrystalEntity, BurgersVectorComponent>,
 ) {
@@ -39,6 +61,26 @@ pub fn initialize_burgers_vectors(
     }
 }
 
+pub fn get_normals_vector(
+    normal_vector_component:&mut NormalVectorComponent
+){
+    let file = File::open(PathBuf::from(FILE_INPUT_PATH).join("n.input")).expect("Ошибка открытия файла n.input");
+    let reader = BufReader::new(file);
+    for (index, line) in reader.lines().enumerate() {
+        let line = line.expect("Ошибка. Файл n.input неверно заполнен");
+        let values: Vec<f64> = line
+            .split_whitespace()
+            .map(|s| s.parse::<f64>().expect("Ошибка перевода строки n.input в числа"))
+            .collect();
+        if values.len()!=3 {
+            panic!("Ошибка. Количество элементов в n.input равно {}",values.len());
+        }
+        let vector = Vector3::new(values[0], values[1], values[2]).normalize();
+        normal_vector_component.set_vector(index*2, vector);
+        normal_vector_component.set_vector(index*2+1, vector);
+    }
+}
+
 pub fn initialize_normal_vectors(
     normals_map: &mut HashMap<CrystalEntity, NormalVectorComponent>,
 ) {
@@ -61,6 +103,29 @@ pub fn initialize_normal_vectors(
                 normal_vector.set_vector(index * 2 + 1, vector);
             }
         });
+    }
+}
+
+pub fn get_new_bn(
+    bn_component:&mut BNComponent,
+    burgers_component: &BurgersVectorComponent,
+    normal_vector_component:&NormalVectorComponent,
+){
+    for index in 0..24 {
+        let b = burgers_component
+            .get_vector(index)
+            .expect("Ошибка извлечения вектора Бюргерса");
+        let n = normal_vector_component
+            .get_vector(index)
+            .expect("Ошибка извлечения вектора Нормали");
+
+        let mut matrix = Matrix3::zeros(); // Создаем пустую матрицу
+        for (i, bi) in b.iter().enumerate() {
+            for (j, nj) in n.iter().enumerate() {
+                matrix[(i, j)] = bi * nj;
+            }
+        }
+        bn_component.set_matrix(index, matrix);
     }
 }
 
@@ -142,6 +207,19 @@ pub fn initialize_tau_c(
             tau_c.set_values(index, value);
         }
     });
+}
+pub fn get_tauc(
+    tau_c_component:&mut TauComponent,
+    tauc:f64,
+    b:f64,
+    k_y: f64,
+    d_g: f64,
+){
+    let value= tauc/MEGA;
+    let addition_hp = k_y*(b / d_g).sqrt() / MEGA;
+    for index in 0..24 {
+        tau_c_component.set_values(index, value + addition_hp);
+    }
 }
 
 pub fn initialize_tau_c_hp(

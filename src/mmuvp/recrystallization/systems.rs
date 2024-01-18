@@ -59,6 +59,20 @@ pub fn calc_mean_accum_energy(est_map: &HashMap<CrystalEntity, AccumEnergyCompon
     (1.0 / est_map.len() as f64) * value
 }
 
+pub fn get_subgrains(
+    subgrains_component:&mut SubGrainsComponent,
+    r0:f64,
+    num:usize,
+){
+    let mut values: Vec<f64> = Vec::new();
+
+    get_distr_rayleigh(&mut values, num, r0);
+
+    for value in values {
+        subgrains_component.push_value(value);
+    }
+}
+
 pub fn initialize_subgrains(
     subgrains_map: &mut HashMap<CrystalEntity, SubGrainsComponent>,
     r0: f64,
@@ -246,16 +260,26 @@ fn generate_lognormal_random_number(mean: f64, std_dev: f64) -> f64 {
 pub fn check_new_grain(
     new_grains: &mut NewGrainsComponent,
     df_recr_map: &HashMap<CrystalEntity, DriveForceRecrComponent>,
+    gr_size_map: &mut HashMap<CrystalEntity, GrainSizeComponent>,
     subgrains_map: &mut HashMap<CrystalEntity, SubGrainsComponent>,
 ) {
     for (entity, df_recr_component) in df_recr_map.iter() {
-        for index in df_recr_component.len()..0 {
-            if df_recr_component.get_value(index).unwrap() > 0.0 {
+        for index in 0..df_recr_component.len() {
+            let value = df_recr_component.get_value(index).unwrap();
+            if value>0.0 {
                 if let Some(subgrains_component) = subgrains_map.get_mut(entity) {
-                    new_grains.push_value(subgrains_component.get_value(index).unwrap());
-                    subgrains_component.set_value(index, 0.00000000001);
+                    if let Some(gr_size_component) = gr_size_map.get_mut(entity){
+                        let gr_size = gr_size_component.get_value();
+                        let subgrain_r = subgrains_component.get_value(index).unwrap();
+                        if gr_size-subgrain_r>0.0{
+                            new_grains.push_value(subgrain_r);
+                            gr_size_component.set_value(gr_size-subgrain_r);
+                            subgrains_component.set_value(index, 1.0e-17);
+                        }
+                    }
                 }
             }
+            
         }
     }
 }

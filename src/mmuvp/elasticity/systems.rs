@@ -240,6 +240,24 @@ pub fn calc_de_elastic_plastic_deform(
     }
 }
 
+pub fn get_elasticity_tensor_fcc(
+    elasticity_component: &mut ElasticityTensorComponent,
+    c11: f64,
+    c12: f64,
+    c44: f64,
+    koef:f64,
+){
+    let c11 = c11 / MEGA;//MPa
+    let c12 = c12 / MEGA;//MPa
+    let c44 = c44 / MEGA;//MPa
+    let value = Matrix6::new(
+        c11, c12, c12, 0.0, 0.0, 0.0, c12, c11, c12, 0.0, 0.0, 0.0, c12, c12, c11, 0.0, 0.0,
+        0.0, 0.0, 0.0, 0.0, c44, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, c44, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, c44,
+    )*koef;
+    elasticity_component.set_value(value);
+}
+
 pub fn initialize_elasticity_tensor_fcc(
     elasticity_map: &mut HashMap<CrystalEntity, ElasticityTensorComponent>,
     c11: f64,

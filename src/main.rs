@@ -143,6 +143,7 @@ fn main() {
     let mut polycrystal_sigma = SigmaComponent::new();
     let mut polycrystal_eps = EpsComponent::new();
     let mut est_poly_component = AccumEnergyComponent::new();
+    let new_grains = &mut NewGrainsComponent::new();
     
     //Ниже можно указать вывод данных которые необходимо вывести для отсчетной конфигурации
     write_pole_figure(&rotation_map);
@@ -152,6 +153,8 @@ fn main() {
 
     //Начало расчета
     for step in 0..params.get_i64("steps_num"){
+        initialize_grad_v(&mut grad_v_map, &rotation_map, init_grad_v);
+        initialize_d(&mut d_map, &grad_v_map);
         //Вычисление текущего времени
         let current_time = time.elapsed();
         //Вычисление НДС для поликристалла, вывод интенсивностей в файл и вывод текущего состояния на экран.
@@ -181,8 +184,53 @@ fn main() {
         est_poly_component.set_value(calc_mean_accum_energy(&est_map));
         calc_drive_force_recr(&mut df_recr_map,  &subgrains_map, &est_poly_component, params.get_f64("egb"));
         //calc_drive_force_recr_cryst(&mut df_recr_cryst_map, &gr_size_map, &est_poly_component, params.get_f64("egb"));
-        calc_facet_mobility(&mut facet_mobility_map, params.get_f64("m0"), params.get_f64("Q"), params.get_f64("r"), params.get_f64("temp"));
+        //calc_facet_mobility(&mut facet_mobility_map, params.get_f64("m0"), params.get_f64("Q"), params.get_f64("r"), params.get_f64("temp"));
+        check_new_grain(new_grains, &df_recr_map, &mut gr_size_map, &mut subgrains_map);
+        if new_grains.len()>0{
+            let entity = CrystalEntity::new((gr_size_map.len()+1) as u32);
 
+            //Заполняются все HashMap объявленные выше. 
+            //Первый аргумент - сущность, второй аргумент - новый экземпляр компонента, третий аргумент - HashMap соответствующего компонента
+            insert_component!(entity, RotationComponent::new(), rotation_map);
+            insert_component!(entity, GradVComponent::new(), grad_v_map);
+            insert_component!(entity, DComponent::new(), d_map);
+            insert_component!(entity, DComponent::new(), de_map);
+            insert_component!(entity, DComponent::new(), din_map);
+            insert_component!(entity, SigmaComponent::new(), sigma_map);
+            insert_component!(entity, SigmaRateComponent::new(), sigma_rate_map);
+            insert_component!(entity, ElasticityTensorComponent::new(), elasticity_map);
+            insert_component!(entity, EpsComponent::new(), eps_map);
+            insert_component!(entity, BurgersVectorComponent::new(), burgers_map);
+            insert_component!(entity, NormalVectorComponent::new(), normals_map);
+            insert_component!(entity, BNComponent::new(), bn_map);
+            insert_component!(entity, TauComponent::new(), tau_map);
+            insert_component!(entity, TauComponent::new(), tau_c_map);
+            insert_component!(entity, TauRateComponent::new(), tau_rate_map);
+            insert_component!(entity, TauRateComponent::new(), tau_c_rate_map);
+            insert_component!(entity, GammaComponent::new(), gamma_map);
+            insert_component!(entity, GammaRateComponent::new(), gamma_rate_map);
+            insert_component!(entity, HVectorComponent::new(), h_vector_map);
+            insert_component!(entity, HMatrixComponent::new(), h_matrix_map);
+            insert_component!(entity, GrainSizeComponent::new(), gr_size_map);
+            insert_component!(entity, AccumEnergyComponent::new(), est_map);
+            insert_component!(entity, AccumEnergyRateComponent::new(), est_rate_map);
+            insert_component!(entity, StatusRecrystComponent::new(), status_map);
+            insert_component!(entity, FacetMobilityComponent::new(), facet_mobility_map);
+            insert_component!(entity, SubGrainsComponent::new(), subgrains_map);
+            insert_component!(entity, DriveForceRecrComponent::new(), df_recr_map);
+            insert_component!(entity, DriveForceRecrCrystComponent::new(), df_recr_cryst_map);
+            insert_component!(entity, VelocityFacetComponent::new(), vel_facet_map);
+
+            rotation_map.get_mut(&entity).unwrap().set_matrix(get_uniform_distribution()).unwrap();
+            get_burgers_vectors(burgers_map.get_mut(&entity).unwrap());
+            get_normals_vector(normals_map.get_mut(&entity).unwrap());
+            get_new_bn(bn_map.get_mut(&entity).unwrap(), burgers_map.get(&entity).unwrap(), normals_map.get(&entity).unwrap());
+            get_elasticity_tensor_fcc(elasticity_map.get_mut(&entity).unwrap(), params.get_f64("c11"), params.get_f64("c12"), params.get_f64("c44"), params.get_f64("koef"));
+            get_tauc(tau_c_map.get_mut(&entity).unwrap(), params.get_f64("tau_c"),params.get_f64("b"), params.get_f64("k_y"), params.get_f64("gr_size"));
+            get_subgrains(subgrains_map.get_mut(&entity).unwrap(), params.get_f64("r0"), params.get_i64("num_sg") as usize);
+            status_map.get_mut(&entity).unwrap().set_value(true);
+        }
+        new_grains.clear();
     }
     //Ниже вывод финального состояния поликристалла. 
     polycrystal_sigma.set_tensor(calc_mean_sigma(&sigma_map, &rotation_map));

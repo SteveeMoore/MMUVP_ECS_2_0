@@ -184,4 +184,7 @@ impl NewGrainsComponent{
     pub fn len(&self) -> usize {
         self.vector.len()
     }
+    pub fn clear(&mut self){
+        self.vector.clear();
+    }
 }

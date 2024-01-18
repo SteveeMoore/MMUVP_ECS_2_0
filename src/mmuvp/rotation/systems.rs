@@ -15,35 +15,37 @@ use super::components::RotationComponent;
 
 pub fn gen_uniform_distribution(rotation_map: &mut HashMap<CrystalEntity, RotationComponent>) {
     if rotation_map.len() > 1 {
-        let mut rng = rand::thread_rng();
-
         for rotation in rotation_map.values_mut() {
-            let a = rng.gen_range(0.0..2.0 * PI);
-            let b: f64 = rng.gen_range(-1.0..1.0);
-            let b = b.acos();
-            let g = rng.gen_range(0.0..2.0 * PI);
-            let ca = a.cos();
-            let sa = a.sin();
-            let cb = b.cos();
-            let sb = b.sin();
-            let cg = g.cos();
-            let sg = g.sin();
-
-            let matrix = Matrix3::new(
-                ca * cb * cg - sa * sg,
-                -cg * sa - ca * cb * sg,
-                ca * sb,
-                cb * cg * sa + ca * sg,
-                ca * cg - cb * sa * sg,
-                sa * sb,
-                -cg * sb,
-                sb * sg,
-                cb,
-            );
-
+            let matrix = get_uniform_distribution();
             rotation.set_matrix(matrix).unwrap();
         }
     }
+}
+
+pub fn get_uniform_distribution()->Matrix3<f64>{
+    let mut rng = rand::thread_rng();
+    let a = rng.gen_range(0.0..2.0 * PI);
+    let b: f64 = rng.gen_range(-1.0..1.0);
+    let b = b.acos();
+    let g = rng.gen_range(0.0..2.0 * PI);
+    let ca = a.cos();
+    let sa = a.sin();
+    let cb = b.cos();
+    let sb = b.sin();
+    let cg = g.cos();
+    let sg = g.sin();
+
+    Matrix3::new(
+        ca * cb * cg - sa * sg,
+        -cg * sa - ca * cb * sg,
+        ca * sb,
+        cb * cg * sa + ca * sg,
+        ca * cg - cb * sa * sg,
+        sa * sb,
+        -cg * sb,
+        sb * sg,
+        cb,
+    )
 }
 
 pub fn write_pole_figure(rotation_map: &HashMap<CrystalEntity, RotationComponent>) {
