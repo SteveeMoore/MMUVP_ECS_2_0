@@ -138,7 +138,7 @@ fn main() {
     initialize_d(&mut d_map, &grad_v_map);
     init_grain_size(&mut gr_size_map, params.get_f64("gr_size"), params.get_f64("std_dev"));
     initialize_subgrains(&mut subgrains_map, params.get_f64("r0"), params.get_i64("num_sg") as usize);
-
+    initialize_drive_force_recr(&mut df_recr_map, &subgrains_map);
     //Объявление и инциализация переменных для поликристалла
     let mut polycrystal_sigma = SigmaComponent::new();
     let mut polycrystal_eps = EpsComponent::new();
@@ -179,8 +179,8 @@ fn main() {
         calc_accum_energy_rate(&mut est_rate_map, &sigma_map, &din_map, params.get_f64("alfa"));
         calc_accum_energy(&mut est_map, &est_rate_map, dt);
         est_poly_component.set_value(calc_mean_accum_energy(&est_map));
-        calc_drive_force_recr(&mut df_recr_map, &status_map, &subgrains_map, &est_poly_component, params.get_f64("egb"));
-        calc_drive_force_recr_cryst(&mut df_recr_cryst_map, &gr_size_map, &est_poly_component, params.get_f64("egb"));
+        calc_drive_force_recr(&mut df_recr_map,  &subgrains_map, &est_poly_component, params.get_f64("egb"));
+        //calc_drive_force_recr_cryst(&mut df_recr_cryst_map, &gr_size_map, &est_poly_component, params.get_f64("egb"));
         calc_facet_mobility(&mut facet_mobility_map, params.get_f64("m0"), params.get_f64("Q"), params.get_f64("r"), params.get_f64("temp"));
 
     }
