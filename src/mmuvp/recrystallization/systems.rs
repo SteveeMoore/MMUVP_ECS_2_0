@@ -1,10 +1,18 @@
 #![allow(dead_code)]
 
-use std::{collections::HashMap, fs::File, path::PathBuf, io::{BufReader, BufRead}};
+use std::collections::HashMap;
 
-use crate::{mmuvp::{entity::CrystalEntity, elasticity::components::{SigmaComponent, DComponent}}, consts::FILE_INPUT_PATH};
+use crate::{
+    mmuvp::{entity::CrystalEntity, 
+        elasticity::components::*
+    }, 
+    consts::MEGA
+};
 
 use super::components::*;
+use rand::{Rng,
+    distributions::Distribution};
+use statrs::distribution::LogNormal;
 
 pub fn calc_accum_energy_rate(
     est_rate_map: &mut HashMap<CrystalEntity, AccumEnergyRateComponent>,
@@ -16,7 +24,7 @@ pub fn calc_accum_energy_rate(
     for (entity, est_rate_component) in est_rate_map.iter_mut(){
         if let Some(sigma_component) = sigma_map.get(entity){
             if let Some(din_component) = din_map.get(entity){
-                let sigma_tensor = sigma_component.get_tensor();
+                let sigma_tensor = sigma_component.get_tensor()*MEGA;
                 let din_tensor = din_component.get_tensor();
                 let value = alfa*(sigma_tensor.dot(&din_tensor));
                 est_rate_component.set_value(value);
@@ -59,33 +67,73 @@ pub fn calc_mean_accum_energy(
 
 pub fn initialize_subgrains(
     subgrains_map:&mut HashMap<CrystalEntity, SubGrainsComponent>,
+    r0: f64,
+    num: usize,
 )
 {
-    let file = File::open(PathBuf::from(FILE_INPUT_PATH).join("r.input")).expect("Ошибка открытия файла b.input");
-    let reader = BufReader::new(file);
-
      // Вектор для хранения значений из файла
      let mut values: Vec<f64> = Vec::new();
 
-     // Чтение строк из файла и запись значений в вектор
-     for line in reader.lines() {
-         if let Ok(value_str) = line {
-             if let Ok(value) = value_str.trim().parse::<f64>() {
-                 values.push(value);
-             } else {
-                 eprintln!("Ошибка преобразования строки в число: {}", value_str);
-             }
-         } else {
-             eprintln!("Ошибка чтения строки из файла");
-         }
-     }
+    get_distr_rayleigh(&mut values, num, r0);
 
-     
+    println!("{:?}",values);
     for value in values{
         for subgrains_component in subgrains_map.values_mut(){
             subgrains_component.push_value(value);
         }
      }
+}
+
+pub fn get_distr_rayleigh(distr: &mut Vec<f64>, num: usize, r0: f64) {
+    let mut ev_dist = Vec::new();
+    let mut distr_den = Vec::new();
+    let mut rando;
+    let mut max:f64;
+    let mut nnum = num;
+    let mut rng = rand::thread_rng();
+    loop {
+        nnum += num / 2;
+        ev_dist.clear();
+        distr_den.clear();
+        distr.clear();
+        max = 0.0;
+
+        for _ in 0..nnum {
+            rando = rng.gen_range(0.0..(10.0 * r0));
+            ev_dist.push(rando);
+        }
+
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..nnum {
+            rando = distr_dens_rayleigh(r0, ev_dist[i]);
+            distr_den.push(rando);
+            if rando > max {
+                max = rando;
+            }
+        }
+
+        for i in 0..nnum {
+            if distr_den[i] / max >= rng.gen_range(0.0..1.0) {
+                distr.push(ev_dist[i]);
+            }
+        }
+
+        if distr.len() >= num {
+            break;
+        }
+    }
+
+    nnum = distr.len() - num;
+    distr.drain(..nnum);
+}
+
+pub fn distr_dens_rayleigh(r0: f64, x: f64) -> f64 {
+    let sigma = r0 * f64::sqrt(2.0 / (2.0 * f64::asin(1.0)));
+    if x >= 0.0 {
+        x / (sigma * sigma) * f64::exp(-(x * x) / (2.0 * sigma * sigma))
+    } else {
+        0.0
+    }
 }
 
 pub fn initialize_drive_force_recr(
@@ -101,22 +149,28 @@ pub fn initialize_drive_force_recr(
 
 pub fn calc_drive_force_recr(
     df_recr_map: &mut HashMap<CrystalEntity, DriveForceRecrComponent>,
+    status_map: &HashMap<CrystalEntity, StatusRecrystComponent>,
     subgrains_map:& HashMap<CrystalEntity, SubGrainsComponent>,
     est_poly_component: &AccumEnergyComponent,
     egb:f64,
 )
 {
     for (entity, df_recr_component) in df_recr_map.iter_mut(){
-        if let Some(subgrains_component) = subgrains_map.get(entity){
-            for index in 0..df_recr_component.len(){
-                let subgrains_r = subgrains_component.get_value(index).unwrap();
-                let est_poly = est_poly_component.get_value();
-                let value = est_poly - 3.0 * egb / subgrains_r;
-                df_recr_component.set_value(index, value);
+        if let Some(status_component) = status_map.get(entity){
+            if status_component.get_value(){
+                if let Some(subgrains_component) = subgrains_map.get(entity){
+                    for index in 0..df_recr_component.len(){
+                        let subgrains_r = subgrains_component.get_value(index).unwrap();
+                        let est_poly = est_poly_component.get_value();
+                        let value = est_poly - 3.0 * egb / subgrains_r;
+                        df_recr_component.set_value(index, value);
+                    }
+                } else {
+                    panic!("Ошибка поиска компонента subgrains")
+                }
             }
-        } else {
-            panic!("Ошибка поиска компонента subgrains")
         }
+        
     }
 }
 
@@ -186,3 +240,21 @@ pub fn calc_grain_size(
         }
     }
 }
+
+pub fn init_grain_size(
+    gr_size_map: &mut HashMap<CrystalEntity, GrainSizeComponent>,
+    mean:f64,
+    std_dev: f64, 
+){
+    for gr_size_component in gr_size_map.values_mut(){
+        let value = generate_lognormal_random_number(mean, std_dev);
+        gr_size_component.set_value(value);
+    }
+}
+
+fn generate_lognormal_random_number(mean: f64, std_dev: f64) -> f64 {
+    let mut rng = rand::thread_rng();
+    let lognormal = LogNormal::new(mean, std_dev).unwrap();
+    lognormal.sample(&mut rng)
+}
+

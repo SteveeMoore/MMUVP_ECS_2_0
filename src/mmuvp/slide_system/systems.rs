@@ -147,11 +147,12 @@ pub fn initialize_tau_c(
 pub fn initialize_tau_c_hp(
     tau_c_map: &mut HashMap<CrystalEntity, TauComponent>,
     tauc: f64,
+    b:f64,
     k_y: f64,
     d_g: f64,
 ){
     let value= tauc/MEGA;
-    let addition_hp = k_y / d_g.sqrt();
+    let addition_hp = k_y*(b / d_g).sqrt() / MEGA;
     tau_c_map.values_mut().for_each(|tau_c| {
         for index in 0..24 {
             tau_c.set_values(index, value + addition_hp);

@@ -27,8 +27,14 @@ use mmuvp::{
     slide_system::{
         components::*,
         systems::*
+    }, 
+    recrystallization::{
+        components::*,
+        systems::*
     }
 };
+
+use crate::mmuvp::recrystallization::systems::init_grain_size;
 
 
 
@@ -46,7 +52,7 @@ fn main() {
     let dt = params.get_f64("dt");
 
     //Ниже записываются начальные условия, считывается траектория деформирования или задается деформации(гипотеза Фойгта)/напряжения(гипотеза Рейса).
-    let init_grad_v = uniaxial_tension(1.0e-3);
+    let init_grad_v = uniaxial_tension(1.0e-2);
     
 
     //Ниже объявляются HashMap всех компонентов. Первый аргумент - название переменной, второй - сущность, третий - компонент. 
@@ -71,6 +77,16 @@ fn main() {
     create_component_map!(gamma_rate_map, CrystalEntity, GammaRateComponent);
     create_component_map!(h_vector_map, CrystalEntity, HVectorComponent);
     create_component_map!(h_matrix_map, CrystalEntity, HMatrixComponent);
+    create_component_map!(gr_size_map,CrystalEntity, GrainSizeComponent);
+    create_component_map!(est_map,CrystalEntity, AccumEnergyComponent);
+    create_component_map!(est_rate_map, CrystalEntity, AccumEnergyRateComponent);
+    create_component_map!(status_map, CrystalEntity, StatusRecrystComponent);
+    create_component_map!(facet_mobility_map, CrystalEntity, FacetMobilityComponent);
+    create_component_map!(subgrains_map,CrystalEntity,SubGrainsComponent);
+    create_component_map!(df_recr_map,CrystalEntity, DriveForceRecrComponent);
+    create_component_map!(df_recr_cryst_map, CrystalEntity, DriveForceRecrCrystComponent);
+    create_component_map!(vel_facet_map, CrystalEntity, VelocityFacetComponent);
+
 
     //Ниже заполняются компоненты для каждого зерна в цикле
     for i in 0..params.get_i64("grain_num"){
@@ -99,6 +115,15 @@ fn main() {
         insert_component!(entity, GammaRateComponent::new(), gamma_rate_map);
         insert_component!(entity, HVectorComponent::new(), h_vector_map);
         insert_component!(entity, HMatrixComponent::new(), h_matrix_map);
+        insert_component!(entity, GrainSizeComponent::new(), gr_size_map);
+        insert_component!(entity, AccumEnergyComponent::new(), est_map);
+        insert_component!(entity, AccumEnergyRateComponent::new(), est_rate_map);
+        insert_component!(entity, StatusRecrystComponent::new(), status_map);
+        insert_component!(entity, FacetMobilityComponent::new(), facet_mobility_map);
+        insert_component!(entity, SubGrainsComponent::new(), subgrains_map);
+        insert_component!(entity, DriveForceRecrComponent::new(), df_recr_map);
+        insert_component!(entity, DriveForceRecrCrystComponent::new(), df_recr_cryst_map);
+        insert_component!(entity, VelocityFacetComponent::new(), vel_facet_map);
     }
 
     //Ниже инициализируются все необходимые переменные
@@ -106,14 +131,18 @@ fn main() {
     initialize_burgers_vectors(&mut burgers_map);
     initialize_normal_vectors(&mut normals_map);
     initialize_bn(&mut bn_map, &burgers_map, &normals_map);
-    initialize_elasticity_tensor_fcc(&mut elasticity_map, params.get_f64("c11"), params.get_f64("c12"), params.get_f64("c44"));
-    initialize_tau_c(&mut tau_c_map, params.get_f64("tau_c"));
+    initialize_elasticity_tensor_fcc(&mut elasticity_map, params.get_f64("c11"), params.get_f64("c12"), params.get_f64("c44"), params.get_f64("koef"));
+    //initialize_tau_c(&mut tau_c_map, params.get_f64("tau_c"));
+    initialize_tau_c_hp(&mut tau_c_map, params.get_f64("tau_c"),params.get_f64("b"), params.get_f64("k_y"), params.get_f64("gr_size"), );
     initialize_grad_v(&mut grad_v_map, &rotation_map, init_grad_v);
     initialize_d(&mut d_map, &grad_v_map);
+    init_grain_size(&mut gr_size_map, params.get_f64("gr_size"), params.get_f64("std_dev"));
+    initialize_subgrains(&mut subgrains_map, params.get_f64("r0"), params.get_i64("num_sg") as usize);
 
     //Объявление и инциализация переменных для поликристалла
     let mut polycrystal_sigma = SigmaComponent::new();
     let mut polycrystal_eps = EpsComponent::new();
+    let mut est_poly_component = AccumEnergyComponent::new();
     
     //Ниже можно указать вывод данных которые необходимо вывести для отсчетной конфигурации
     write_pole_figure(&rotation_map);
@@ -147,6 +176,13 @@ fn main() {
         calc_hooke_law(&mut sigma_rate_map, &elasticity_map, &de_map);
         calc_sigma(&mut sigma_map, &sigma_rate_map, dt);
         calc_eps(&mut eps_map, &d_map, dt);
+        calc_accum_energy_rate(&mut est_rate_map, &sigma_map, &din_map, params.get_f64("alfa"));
+        calc_accum_energy(&mut est_map, &est_rate_map, dt);
+        est_poly_component.set_value(calc_mean_accum_energy(&est_map));
+        calc_drive_force_recr(&mut df_recr_map, &status_map, &subgrains_map, &est_poly_component, params.get_f64("egb"));
+        calc_drive_force_recr_cryst(&mut df_recr_cryst_map, &gr_size_map, &est_poly_component, params.get_f64("egb"));
+        calc_facet_mobility(&mut facet_mobility_map, params.get_f64("m0"), params.get_f64("Q"), params.get_f64("r"), params.get_f64("temp"));
+
     }
     //Ниже вывод финального состояния поликристалла. 
     polycrystal_sigma.set_tensor(calc_mean_sigma(&sigma_map, &rotation_map));

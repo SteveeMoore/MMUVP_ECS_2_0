@@ -1,4 +1,19 @@
 #![allow(dead_code)]
+pub struct StatusRecrystComponent{
+    status:bool,
+}
+impl StatusRecrystComponent {
+    pub fn new() -> Self{
+        StatusRecrystComponent{ status: false}
+    }
+    pub fn get_value(&self)-> bool {
+        self.status
+    }
+
+    pub fn set_value(&mut self, value:bool) {
+        self.status = value
+    }
+}
 pub struct GrainSizeComponent{
     value:f64
 }
@@ -141,5 +156,32 @@ impl VelocityFacetComponent{
     }
     pub fn get_value(&self)->f64{
         self.value
+    }
+}
+
+pub struct NewGrainsComponent{
+    vector: Vec<f64>,
+}
+impl NewGrainsComponent{
+    pub fn new()->Self {
+        NewGrainsComponent{vector: Vec::new()}
+    }
+    pub fn set_value(&mut self, index: usize, value: f64) {
+        if index < self.vector.len() {
+            self.vector[index] = value;
+        }
+    }
+    pub fn push_value(&mut self, value:f64){
+        self.vector.push(value);
+    }
+    pub fn get_value(&self, index: usize) -> Option<f64> {
+        if index < self.vector.len() {
+            Some(self.vector[index])
+        } else {
+            None
+        }
+    }
+    pub fn len(&self) -> usize {
+        self.vector.len()
     }
 }

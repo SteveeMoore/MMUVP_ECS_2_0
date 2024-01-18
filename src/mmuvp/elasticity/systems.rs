@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use rayon::prelude::*;
 
 use std::{
     collections::HashMap, 
@@ -108,7 +109,8 @@ pub fn calc_eps(
     d_map: &HashMap<CrystalEntity, DComponent>,
     dt: f64,
 ) {
-    for (entity, e_component) in eps_map.iter_mut() {
+    //for (entity, e_component) in eps_map.iter_mut() {
+    eps_map.par_iter_mut().for_each(|(entity,e_component)|{
         if let Some(d_component) = d_map.get(entity) {
             let mut summ = Matrix3::zeros();
             summ += e_component.get_tensor();
@@ -117,7 +119,7 @@ pub fn calc_eps(
         } else {
             panic!("Ошибка поиска компонента деформации скорости");
         }
-    }
+    })
 }
 
 pub fn calc_mean_eps(
@@ -147,7 +149,8 @@ pub fn calc_sigma(
     sigma_rate_map: &HashMap<CrystalEntity, SigmaRateComponent>,
     dt: f64,
 ) {
-    for (entity, sigma_component) in sigma_map.iter_mut() {
+    //for (entity, sigma_component) in sigma_map.iter_mut() {
+    sigma_map.par_iter_mut().for_each(|(entity,sigma_component)|{
         if let Some(sigma_rate_component) = sigma_rate_map.get(entity) {
             let mut summ = Matrix3::zeros();
             summ += sigma_component.get_tensor();
@@ -156,7 +159,7 @@ pub fn calc_sigma(
         } else {
             panic!("Ошибка поиска компонента sigma");
         }
-    }
+    })
 }
 
 pub fn calc_mean_sigma(
@@ -242,6 +245,7 @@ pub fn initialize_elasticity_tensor_fcc(
     c11: f64,
     c12: f64,
     c44: f64,
+    koef:f64,
 ) {
     let c11 = c11 / MEGA;//MPa
     let c12 = c12 / MEGA;//MPa
@@ -251,7 +255,7 @@ pub fn initialize_elasticity_tensor_fcc(
             c11, c12, c12, 0.0, 0.0, 0.0, c12, c11, c12, 0.0, 0.0, 0.0, c12, c12, c11, 0.0, 0.0,
             0.0, 0.0, 0.0, 0.0, c44, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, c44, 0.0, 0.0, 0.0, 0.0, 0.0,
             0.0, c44,
-        );
+        )*koef;
         c_tensor.set_value(value);
     }
 }
