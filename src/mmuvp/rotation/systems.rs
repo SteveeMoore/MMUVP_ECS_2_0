@@ -163,7 +163,6 @@ pub fn calc_spin(
                         second_term += gamma_rate*(bn-transpose_bn);
                     }
                     second_term/=2.0;
-                    //println!("{:?}", second_term);
                     let tensor = w_tensor-second_term;
                     spin.set_tensor(tensor).unwrap();                    
                 } 

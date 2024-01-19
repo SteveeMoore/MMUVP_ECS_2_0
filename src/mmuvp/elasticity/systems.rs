@@ -13,7 +13,7 @@ use crate::{mmuvp::{
     entity::CrystalEntity, 
     rotation::components::*, 
     slide_system::components::*
-}, consts::{FILE_INPUT_PATH, FILE_OUTPUT_PATH, MEGA}};
+}, consts::{FILE_INPUT_PATH, FILE_OUTPUT_PATH, MEGA}, GrainSizeComponent};
 
 use super::components::*;
 
@@ -68,7 +68,7 @@ pub fn read_grad_v_from_file_with_6_comp(
             components[2], components[4], components[5]
         );
         let mut deformation = TrajectoryDeformationComponent::new();
-        println!("{:?}",grad_v);
+        //println!("{:?}",grad_v);
         deformation.set_value(time, grad_v);
         trajectory_deformation.push(deformation);
     }
@@ -177,6 +177,29 @@ pub fn calc_mean_sigma(
         }
     }
     (1.0 / sigma_map.len() as f64) * mean_matrix
+}
+
+pub fn calc_mean_sigma_with_weidth(
+    sigma_map: &HashMap<CrystalEntity, SigmaComponent>,
+    gr_size_map: &HashMap<CrystalEntity, GrainSizeComponent>,
+    rotation_map: &HashMap<CrystalEntity, RotationComponent>,
+) -> Matrix3<f64> {
+    let mut summ=0.0;
+    let mut mean_matrix = Matrix3::zeros();
+    for (entity, sigma_component) in sigma_map.iter() {
+        if let Some(orient_component) = rotation_map.get(entity) {
+            if let Some(gr_size_component) = gr_size_map.get(entity){
+                let sigma_tensor = sigma_component.get_tensor()*gr_size_component.get_value();
+                summ+= gr_size_component.get_value();
+                mean_matrix += orient_component.get_tensor()
+                    * sigma_tensor
+                    * orient_component.get_tensor().transpose();
+            }
+        } else {
+            panic!("Ошибка поиска тензора ориентации");
+        }
+    }
+    (1.0 / sigma_map.len() as f64) * mean_matrix/summ
 }
 
 pub fn calc_intensity_s(sigma_component: &SigmaComponent) -> f64 {

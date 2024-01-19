@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fs::OpenOptions, path::PathBuf, io::{BufWriter,Write}};
 
 use crate::{
-    consts::MEGA,
-    mmuvp::{elasticity::components::*, entity::CrystalEntity},
+    consts::{MEGA, FILE_OUTPUT_PATH},
+    mmuvp::{elasticity::components::*, entity::CrystalEntity}, TauComponent,
 };
 
 use super::components::*;
@@ -79,12 +79,12 @@ pub fn initialize_subgrains(
     num: usize,
 ) {
     // Вектор для хранения значений из файла
-    let mut values: Vec<f64> = Vec::new();
+    for subgrains_component in subgrains_map.values_mut() {
+        let mut values: Vec<f64> = Vec::new();
+        
+        get_distr_rayleigh(&mut values, num, r0);
 
-    get_distr_rayleigh(&mut values, num, r0);
-
-    for value in values {
-        for subgrains_component in subgrains_map.values_mut() {
+        for value in values {
             subgrains_component.push_value(value);
         }
     }
@@ -146,10 +146,13 @@ pub fn initialize_drive_force_recr(
     df_recr_map: &mut HashMap<CrystalEntity, DriveForceRecrComponent>,
     subgrains_map: &HashMap<CrystalEntity, SubGrainsComponent>,
 ) {
-    for df_recr_component in df_recr_map.values_mut() {
-        for _index in 0..subgrains_map.len() {
-            df_recr_component.push_value(0.0);
+    for (entity,df_recr_component) in df_recr_map.iter_mut() {
+        if let Some(subgrains_component) = subgrains_map.get(entity){
+            for _index in 0..subgrains_component.len() {
+                df_recr_component.push_value(0.0);
+            }
         }
+        
     }
 }
 
@@ -164,7 +167,7 @@ pub fn calc_drive_force_recr(
             for index in 0..df_recr_component.len() {
                 let subgrains_r = subgrains_component.get_value(index).unwrap();
                 let est_poly = est_poly_component.get_value();
-                let value = est_poly - 3.0 * egb / subgrains_r;
+                let value = est_poly - 3.0 * egb / subgrains_r;                
                 df_recr_component.set_value(index, value);
             }
         } else {
@@ -175,18 +178,23 @@ pub fn calc_drive_force_recr(
 
 pub fn calc_drive_force_recr_cryst(
     df_recr_cryst_map: &mut HashMap<CrystalEntity, DriveForceRecrCrystComponent>,
+    status_map:&HashMap<CrystalEntity,StatusRecrystComponent>,
     gr_size_map: &HashMap<CrystalEntity, GrainSizeComponent>,
     est_poly_component: &AccumEnergyComponent,
     egb: f64,
 ) {
     for (entity, df_recr_cryst_component) in df_recr_cryst_map.iter_mut() {
-        if let Some(gr_size_component) = gr_size_map.get(entity) {
-            let gr_size = gr_size_component.get_value();
-            let est_poly = est_poly_component.get_value();
-            let value = est_poly - 3.0 * egb / gr_size;
-            df_recr_cryst_component.set_value(value);
-        } else {
-            panic!("Ошибка поиска компонента gr_size")
+        if let Some(status_component) = status_map.get(entity){
+            if status_component.get_value(){
+                if let Some(gr_size_component) = gr_size_map.get(entity) {
+                    let gr_size = gr_size_component.get_value();
+                    let est_poly = est_poly_component.get_value();
+                    let value = est_poly - 3.0 * egb / gr_size;
+                    df_recr_cryst_component.set_value(value);
+                } else {
+                    panic!("Ошибка поиска компонента gr_size")
+                }
+            }
         }
     }
 }
@@ -214,7 +222,10 @@ pub fn calc_vel_facet(
             if let Some(facet_mobility_component) = facet_mobility_map.get(entity) {
                 let df_recr_cryst = df_recr_cryst_component.get_value();
                 let facet_mobility = facet_mobility_component.get_value();
-                let value = df_recr_cryst * facet_mobility;
+                let mut value = df_recr_cryst * facet_mobility;
+                if value < 0.0 {
+                    value = 0.0;
+                }
                 vel_facet_component.set_value(value);
             } else {
                 panic!("Ошибка поиска компонента facet_mobility")
@@ -227,18 +238,32 @@ pub fn calc_vel_facet(
 
 pub fn calc_grain_size(
     gr_size_map: &mut HashMap<CrystalEntity, GrainSizeComponent>,
+    tau_c_map:&mut HashMap<CrystalEntity, TauComponent>,
     vel_facet_map: &HashMap<CrystalEntity, VelocityFacetComponent>,
+    b:f64,
+    k_y: f64,
     dt: f64,
 ) {
     for (entity, gr_size_component) in gr_size_map.iter_mut() {
         if let Some(vel_facet_component) = vel_facet_map.get(entity) {
-            let vel_facet = vel_facet_component.get_value();
-            let gr_size = gr_size_component.get_value();
-            let value = gr_size + vel_facet * dt;
-            gr_size_component.set_value(value);
+            if let Some(tau_c_component) = tau_c_map.get_mut(entity){
+                
+                let vel_facet = vel_facet_component.get_value();
+                let gr_size = gr_size_component.get_value();
+                let value = gr_size + vel_facet * dt;
+                gr_size_component.set_value(value);
+                for index in 0..24{
+                    let tau_c = tau_c_component.get_values(index).unwrap();
+                    let tau_c_witout_hp = tau_c - k_y*(b / gr_size).sqrt() / MEGA;
+                    let new_tau_c = tau_c_witout_hp + k_y*(b / value).sqrt() / MEGA;
+                    tau_c_component.set_values(index, new_tau_c);
+                }
+            }
         }
     }
 }
+
+
 
 pub fn init_grain_size(
     gr_size_map: &mut HashMap<CrystalEntity, GrainSizeComponent>,
@@ -247,7 +272,8 @@ pub fn init_grain_size(
 ) {
     for gr_size_component in gr_size_map.values_mut() {
         let value = generate_lognormal_random_number(mean, std_dev);
-        gr_size_component.set_value(value);
+
+        gr_size_component.set_value(value-1.0);
     }
 }
 
@@ -263,6 +289,7 @@ pub fn check_new_grain(
     gr_size_map: &mut HashMap<CrystalEntity, GrainSizeComponent>,
     subgrains_map: &mut HashMap<CrystalEntity, SubGrainsComponent>,
 ) {
+    let mut i:i64=0;
     for (entity, df_recr_component) in df_recr_map.iter() {
         for index in 0..df_recr_component.len() {
             let value = df_recr_component.get_value(index).unwrap();
@@ -271,15 +298,54 @@ pub fn check_new_grain(
                     if let Some(gr_size_component) = gr_size_map.get_mut(entity){
                         let gr_size = gr_size_component.get_value();
                         let subgrain_r = subgrains_component.get_value(index).unwrap();
-                        if gr_size-subgrain_r>0.0{
+                        let grain_v = 4.0*std::f64::consts::PI*gr_size.powf(3.0)/3.0;
+                        let subgrain_v = 4.0*std::f64::consts::PI*subgrain_r.powf(3.0)/3.0;
+                        if grain_v-subgrain_v>0.0{
+                            let new_gr_size = ((grain_v-subgrain_v)*3.0/4.0/std::f64::consts::PI).powf(1.0/3.0);
+                            i+=1;
                             new_grains.push_value(subgrain_r);
-                            gr_size_component.set_value(gr_size-subgrain_r);
+                            gr_size_component.set_value(new_gr_size);
                             subgrains_component.set_value(index, 1.0e-17);
                         }
                     }
                 }
             }
-            
         }
     }
+    
+}
+
+pub fn calc_mean_grain_size(
+    gr_size_map: &HashMap<CrystalEntity, GrainSizeComponent>
+)->f64{
+    let mut mean_gr_size = 0.0;
+    for gr_size_component in gr_size_map.values(){
+        let value=gr_size_component.get_value();
+        
+        mean_gr_size+=value;
+    }
+    mean_gr_size/(gr_size_map.len() as f64)
+}
+
+pub fn print_mean_grainsize_to_file(
+    gr_size_map: & HashMap<CrystalEntity, GrainSizeComponent>,
+    dt:f64,
+    step:i64,
+){
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(PathBuf::from(FILE_OUTPUT_PATH).join("grsize.dat"))
+        .expect("Ошибка открытия файла grsize.dat");
+    //let file = File::create(FILE_OUTPUT_PATH.to_string() + "din.dat")?;
+    let mut buf_writer = BufWriter::with_capacity(4 * (10 + 1 + 10 + 1) * 3, file);
+    write!(buf_writer, "{:.4e}\t", calc_mean_grain_size(gr_size_map))
+        .expect("Ошибка записи интенсивности деформации в grsize.dat");
+    write!(buf_writer, "{:.4e}\t", gr_size_map.len())
+        .expect("Ошибка записи интенсивности деформации в grsize.dat");
+    write!(buf_writer, "{}\t", dt * step as f64).expect("Ошибка записи времени в grsize.dat");
+    writeln!(buf_writer).expect("Ошибка записи разделителя в rvout.dat");
+    buf_writer
+    .flush()
+    .expect("Ошибка завершения записи в rvout.dat");
 }

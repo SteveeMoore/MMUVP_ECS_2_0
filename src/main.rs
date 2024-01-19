@@ -133,10 +133,10 @@ fn main() {
     initialize_bn(&mut bn_map, &burgers_map, &normals_map);
     initialize_elasticity_tensor_fcc(&mut elasticity_map, params.get_f64("c11"), params.get_f64("c12"), params.get_f64("c44"), params.get_f64("koef"));
     //initialize_tau_c(&mut tau_c_map, params.get_f64("tau_c"));
-    initialize_tau_c_hp(&mut tau_c_map, params.get_f64("tau_c"),params.get_f64("b"), params.get_f64("k_y"), params.get_f64("gr_size"), );
+    init_grain_size(&mut gr_size_map, params.get_f64("gr_size"), params.get_f64("std_dev"));
+    initialize_tau_c_hp(&mut tau_c_map, &gr_size_map, params.get_f64("tau_c"),params.get_f64("b"), params.get_f64("k_y"));
     initialize_grad_v(&mut grad_v_map, &rotation_map, init_grad_v);
     initialize_d(&mut d_map, &grad_v_map);
-    init_grain_size(&mut gr_size_map, params.get_f64("gr_size"), params.get_f64("std_dev"));
     initialize_subgrains(&mut subgrains_map, params.get_f64("r0"), params.get_i64("num_sg") as usize);
     initialize_drive_force_recr(&mut df_recr_map, &subgrains_map);
     //Объявление и инциализация переменных для поликристалла
@@ -163,6 +163,7 @@ fn main() {
             polycrystal_sigma.set_tensor(calc_mean_sigma(&sigma_map, &rotation_map));
             polycrystal_eps.set_tensor(calc_mean_eps(&eps_map, &rotation_map));
             write_intensity_to_file(&polycrystal_eps, &polycrystal_sigma, step, dt);
+            print_mean_grainsize_to_file(& gr_size_map, dt, step);
             print_current_sys(current_time, step, params.get_i64("steps_num"), &polycrystal_eps, &polycrystal_sigma);
         }
         //Вычисление всех компонент согласно выбранной модели. Если для компонент были выбраны стандартные имена переменных,
@@ -183,12 +184,14 @@ fn main() {
         calc_accum_energy(&mut est_map, &est_rate_map, dt);
         est_poly_component.set_value(calc_mean_accum_energy(&est_map));
         calc_drive_force_recr(&mut df_recr_map,  &subgrains_map, &est_poly_component, params.get_f64("egb"));
-        //calc_drive_force_recr_cryst(&mut df_recr_cryst_map, &gr_size_map, &est_poly_component, params.get_f64("egb"));
-        //calc_facet_mobility(&mut facet_mobility_map, params.get_f64("m0"), params.get_f64("Q"), params.get_f64("r"), params.get_f64("temp"));
+        calc_drive_force_recr_cryst(&mut df_recr_cryst_map, &status_map, &gr_size_map, &est_poly_component, params.get_f64("egb"));
+        calc_facet_mobility(&mut facet_mobility_map, params.get_f64("m0"), params.get_f64("Q"), params.get_f64("r"), params.get_f64("temp"));
+        calc_vel_facet(&mut vel_facet_map, &df_recr_cryst_map, &facet_mobility_map);
+        //calc_grain_size(&mut gr_size_map, &mut tau_c_map, &vel_facet_map, params.get_f64("b"), params.get_f64("k_y"), dt);
         check_new_grain(new_grains, &df_recr_map, &mut gr_size_map, &mut subgrains_map);
-        if new_grains.len()>0{
-            let entity = CrystalEntity::new((gr_size_map.len()+1) as u32);
-
+        for index in 0..new_grains.len(){
+            let entity = CrystalEntity::new(((gr_size_map.len()+1) as u32).try_into().unwrap());
+            
             //Заполняются все HashMap объявленные выше. 
             //Первый аргумент - сущность, второй аргумент - новый экземпляр компонента, третий аргумент - HashMap соответствующего компонента
             insert_component!(entity, RotationComponent::new(), rotation_map);
@@ -221,6 +224,8 @@ fn main() {
             insert_component!(entity, DriveForceRecrCrystComponent::new(), df_recr_cryst_map);
             insert_component!(entity, VelocityFacetComponent::new(), vel_facet_map);
 
+            gr_size_map.get_mut(&entity).unwrap().set_value(new_grains.get_value(index).unwrap());
+            status_map.get_mut(&entity).unwrap().set_value(true);
             rotation_map.get_mut(&entity).unwrap().set_matrix(get_uniform_distribution()).unwrap();
             get_burgers_vectors(burgers_map.get_mut(&entity).unwrap());
             get_normals_vector(normals_map.get_mut(&entity).unwrap());
@@ -228,7 +233,7 @@ fn main() {
             get_elasticity_tensor_fcc(elasticity_map.get_mut(&entity).unwrap(), params.get_f64("c11"), params.get_f64("c12"), params.get_f64("c44"), params.get_f64("koef"));
             get_tauc(tau_c_map.get_mut(&entity).unwrap(), params.get_f64("tau_c"),params.get_f64("b"), params.get_f64("k_y"), params.get_f64("gr_size"));
             get_subgrains(subgrains_map.get_mut(&entity).unwrap(), params.get_f64("r0"), params.get_i64("num_sg") as usize);
-            status_map.get_mut(&entity).unwrap().set_value(true);
+            
         }
         new_grains.clear();
     }
@@ -237,4 +242,5 @@ fn main() {
     polycrystal_eps.set_tensor(calc_mean_eps(&eps_map, &rotation_map));
     write_intensity_to_file(&polycrystal_eps, &polycrystal_sigma, params.get_i64("steps_num"), dt);
     print_current_sys(time.elapsed(), params.get_i64("steps_num"), params.get_i64("steps_num"), &polycrystal_eps, &polycrystal_sigma);
+    println!("{}", gr_size_map.len());
 }

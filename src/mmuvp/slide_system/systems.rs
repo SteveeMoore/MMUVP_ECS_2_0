@@ -10,7 +10,7 @@ use nalgebra::{Vector3, Matrix3};
 
 use crate::{
     mmuvp::{entity::CrystalEntity, elasticity::components::SigmaComponent}, 
-    consts::{FILE_INPUT_PATH, MEGA}};
+    consts::{FILE_INPUT_PATH, MEGA}, GrainSizeComponent};
 
 use super::components::*;
 
@@ -224,18 +224,22 @@ pub fn get_tauc(
 
 pub fn initialize_tau_c_hp(
     tau_c_map: &mut HashMap<CrystalEntity, TauComponent>,
+    gr_size_map: & HashMap<CrystalEntity,GrainSizeComponent>,
     tauc: f64,
     b:f64,
     k_y: f64,
-    d_g: f64,
 ){
     let value= tauc/MEGA;
-    let addition_hp = k_y*(b / d_g).sqrt() / MEGA;
-    tau_c_map.values_mut().for_each(|tau_c| {
-        for index in 0..24 {
-            tau_c.set_values(index, value + addition_hp);
+    
+    for (entity, tau_c) in tau_c_map.iter_mut(){
+        if let Some(gr_size_component) = gr_size_map.get(entity){
+            let gr_size = gr_size_component.get_value();
+            let addition_hp = k_y*(b / gr_size).sqrt() / MEGA;
+            for index in 0..24 {
+                tau_c.set_values(index, value + addition_hp);
+            }
         }
-    });
+    }
 }
 
 pub fn calc_gamma(
